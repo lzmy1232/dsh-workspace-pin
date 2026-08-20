@@ -75,6 +75,82 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
 
 > 注意:DSH 升级会重新写入该 bundle,补丁会被覆盖,届时重新运行安装脚本即可(若新版代码变动,请等待仓库适配)。
 
+## 桌面端「重启后置顶消失」修复(固定端口补丁)
+
+DeepSeek Harness **桌面版每次启动使用随机端口**,而浏览器本地存储(localStorage)按"网址+端口"隔离,所以置顶、主题等所有本地偏好每次重启都会重置。本仓库附带**固定端口补丁**,把桌面版端口固定为 `9860`,一劳永逸解决。
+
+### 适用版本
+
+- DeepSeek Harness **桌面版 0.1.0-rc.5**(`@deepseek-ai/dsh-desktop`),原版 `app.asar` 的 SHA1 已写入脚本作为**版本门禁**;
+- 版本不符会**直接拒绝并中止**,不会损坏你的应用。
+
+### 安装
+
+1. 完全退出 DSH 桌面应用;
+2. 在仓库目录运行:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\fix-desktop-port.ps1
+   ```
+   脚本会:校验版本 → 备份原 `app.asar` 为 `app.asar.bak-dshport` → 替换为补丁版(官方 asar 格式)→ 校验 → 重新启动应用;
+3. 应用固定运行在 **http://127.0.0.1:9860**;
+4. 打开后把会话重新置顶一次,之后**重启均保留**。
+
+### 还原
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\fix-desktop-port.ps1 -Restore
+```
+
+### 注意
+
+- DSH 升级会覆盖 `app.asar`,升级后需重新运行本脚本;
+- 若 9860 端口被占用,可自行用官方 `@electron/asar` 重新打包一个别的端口(教程见仓库 Issues)。
+
+## 「重启后标题消失」修复(会话标题补丁)
+
+**现象**:重启 DSH 后,左侧会话列表的标题变成工作区目录名(如 `deapseak_Harness`),要点进会话才恢复真实标题。
+
+**原因**:侧栏标题来自"会话投影缓存"(`session_projcache.json`),该缓存在本版本存在**写入卡死**问题(长期不落盘),冷启动时大量会话没有缓存标题,按设计降级显示工作区目录名。
+
+**修复**:在宿主 `dsh-host-apiproxy` 的会话列表下发逻辑里增加"标题兜底"——缓存缺标题时直接从会话日志折叠出标题补上(单文件上限 2MB、有记忆、失败自动降级,不影响其它功能)。
+
+### 安装
+
+1. 完全退出 DSH 桌面应用;
+2. 运行:
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\install-title-fix.ps1
+   ```
+   脚本会:校验版本(哈希门禁)→ 备份 → 替换 → 校验 → 重新启动应用;
+3. 重启后左侧列表**直接显示真实标题**,无需再逐个点进会话。
+
+### 还原
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install-title-fix.ps1 -Restore
+```
+
+### 注意
+
+- DSH 升级会覆盖宿主文件,升级后需重新运行本脚本;
+- 适用 DeepSeek Harness 桌面版 0.1.0-rc.5(哈希门禁,版本不符自动拒绝)。
+
+## ⚠️ 重要使用建议:不要同时开桌面版和网页版
+
+桌面版(9860)和网页版(启动器 3080)是**两个独立实例,共用同一批存储文件与会话日志**。同时运行会导致:
+
+- 存储写入互相冲突,投影缓存长期不更新(这正是"重启后标题消失"的诱因之一);
+- 桌面版启动时可能因抢文件而卡住。
+
+**建议:只用其中一个**(优先桌面版,固定 9860);关掉网页版用启动器的「关闭 DSH」或:
+```powershell
+powershell -ExecutionPolicy Bypass -File D:\deapseak_Harness\launcher\stop-dsh.ps1
+```
+
+## 已知问题
+
+- 投影缓存 `session_projcache.json` 在本版本存在写入卡死(作者环境自 16:07 起不再落盘);标题修复已绕开它,不影响使用,但缓存文件本身仍是旧的。
+
 ## 许可
 
 补丁部分按需自用/分享;DSH 本体版权归 DeepSeek 所有。
